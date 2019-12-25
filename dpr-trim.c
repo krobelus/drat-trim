@@ -53,7 +53,7 @@ struct solver { FILE *inputFile, *proofFile, *lratFile, *traceFile, *activeFile;
     int *DB, nVars, timeout, mask, delete, *falseStack, *false, *forced, binMode, optimize,
       *processed, *assigned, count, *used, *max, COREcount, RATmode, RATcount, nActive,
       nLemmas, maxRAT, *RATset, *preRAT, maxDependencies, nDependencies, bar, backforce,
-      *witness, witnessSize, witnessAlloc,
+      *witness, witnessSize, witnessAlloc, *witnessSet,
       *dependencies, maxVar, maxSize, mode, verb, unitSize, prep, *current, nRemoved, warning;
     char *coreStr, *lemmaStr;
     struct timeval start_time;
@@ -413,6 +413,8 @@ int checkPR (struct solver *S, int *witness) {
 
   // remove from omega all literals in alpha?
 
+  { int *w = witness; while (*w) S->witnessSet[*w++] = 1; }
+
   // Loop over all literals to calculate the clauses which are reduced but not satisfied by omega
   for (i = -S->maxVar; i <= S->maxVar; i++) {
     if (i == 0) continue;
@@ -426,11 +428,8 @@ int checkPR (struct solver *S, int *witness) {
       if (*watched == i) { // If watched literal is in first position
 	while (*watched) {
           int lit = *watched++;
-          int *w = witness;
-          while (*w) {
-            if (*w ==  lit) satisfied++;
-            if (*w == -lit) reduced++;
-            w++; } }
+          if (S->witnessSet[lit]) satisfied++;
+          if (S->witnessSet[-lit]) reduced++; }
         if (satisfied == 0 && reduced > 0) {
           if ((S->mode == BACKWARD_UNSAT) && !active) {
 //            printf ("\rc PR check ignores unmarked clause : "); printClause (S->DB + (S->wlist[i][j] >> 1));
@@ -455,10 +454,7 @@ int checkPR (struct solver *S, int *witness) {
     while (*PRcls) {
       int lit = *PRcls++;
         int wflag = 0;
-        int *w = witness;
-        while (*w) {
-          if (*w == -lit) wflag = 1;
-          w++; }
+        if (S->witnessSet[-lit]) wflag = 1;
       if (wflag == 0 && S->false[-lit])
         if (!blocked || reason > S->reason[abs (lit)])
           blocked = lit, reason = S->reason[abs (lit)]; }
@@ -472,14 +468,13 @@ int checkPR (struct solver *S, int *witness) {
       while (*PRcls) {
         int lit = *PRcls++;
         int wflag = 0;
-        int *w = witness;
-        while (*w) {
-          if (*w == -lit) wflag = 1;
-          w++; }
+        if (S->witnessSet[-lit]) wflag = 1;
         if (wflag == 0 && !S->false[lit]) {
           assign (S, -lit); S->reason[abs (lit)] = 0; } }
       if (propagate (S, 0) == SAT) { flag  = 0; break; } }
     addDependency (S, -id, 1); }
+
+  { int *w = witness; while (*w) S->witnessSet[*w++] = 0; }
 
   if (flag == 0) {
     while (S->forced < S->assigned) S->false[*(--S->assigned)] = 0;
@@ -1146,6 +1141,8 @@ int parse (struct solver* S) {
   S->used       = (int *) malloc ((2 * n + 1) * sizeof (int )); S->used  += n; // Labels for variables, non-zero means false
   S->max        = (int *) malloc ((2 * n + 1) * sizeof (int )); S->max   += n; // Labels for variables, non-zero means false
   S->false      = (int *) malloc ((2 * n + 1) * sizeof (int )); S->false += n; // Labels for variables, non-zero means false
+  S->witnessSet = (int *) malloc ((2 * n + 1) * sizeof (int )); S->witnessSet += n; // Literals in current witness are non-zero.
+  for (int i = -n; i < n + 1; i++) S->witnessSet[i] = 0;
 
   S->optproof   = (long *) malloc (sizeof(long) * (2 * S->nLemmas + S->nClauses));
 
@@ -1180,6 +1177,7 @@ void freeMemory (struct solver *S) {
   free (S->max   - S->maxVar);
   free (S->false - S->maxVar);
   free (S->wlist - S->maxVar);
+  free (S->witnessSet - S->maxVar);
   free (S->RATset);
   free (S->dependencies);
   return; }
