@@ -426,14 +426,14 @@ int checkPR (struct solver *S, int *witness) {
       int reduced   = 0;
       int satisfied = 0;
       if (*watched == i) { // If watched literal is in first position
+          if ((S->mode == BACKWARD_UNSAT) && !active) {
+//            printf ("\rc PR check ignores unmarked clause : "); printClause (S->DB + (S->wlist[i][j] >> 1));
+            continue; }
 	while (*watched) {
           int lit = *watched++;
           if (S->witnessSet[lit]) satisfied++;
           if (S->witnessSet[-lit]) reduced++; }
         if (satisfied == 0 && reduced > 0) {
-          if ((S->mode == BACKWARD_UNSAT) && !active) {
-//            printf ("\rc PR check ignores unmarked clause : "); printClause (S->DB + (S->wlist[i][j] >> 1));
-            continue; }
 	  if (nPR == S->maxRAT) {
 	    S->maxRAT = (S->maxRAT * 3) >> 1;
 	    S->RATset = realloc (S->RATset, sizeof (int) * S->maxRAT); }
